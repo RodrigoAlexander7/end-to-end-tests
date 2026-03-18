@@ -148,8 +148,8 @@ def load_calibration(pipeline, calib_path: str):
         import cv2
 
         intrinsic_keys = [
-            ("camera_matrix_left", "dist_coeffs_left"),
-            ("camera_matrix_right", "dist_coeffs_right"),
+            ("K_L", "D_L"),
+            ("K_R", "D_R"),
         ]
         maps = []
         for cam_key, dist_key in intrinsic_keys:
@@ -158,7 +158,12 @@ def load_calibration(pipeline, calib_path: str):
                 return False
             K = data[cam_key]
             D = data[dist_key]
-            h, w = 720, 1280  # Single camera resolution
+            
+            if "img_size" in data:
+                w, h = int(data["img_size"][0]), int(data["img_size"][1])
+            else:
+                w, h = 1280, 720
+                
             new_K, _ = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
             m1, m2 = cv2.initUndistortRectifyMap(K, D, None, new_K, (w, h), cv2.CV_32FC1)
             maps.extend([m1, m2])
