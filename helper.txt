@@ -1,0 +1,22 @@
+git clone https://github.com/RodrigoAlexander7/end-to-end-tests.git
+cd end-to-end-tests
+python -m venv venv
+source venv/bin/activate
+pip install pybind11 numpy pyserial
+mkdir build && cd build && cmake .. && make -j4
+cp cansat_pipeline*.so ../
+python scripts/cansat_pipeline.py --serial-port /dev/ttyS0
+
+#IF YOU USE THE LED VERSION YOU NEED TO USE
+sudo python scripts/cansat_pipeline.py --serial-port /dev/ttyS0
+
+
+see status:
+sudo systemctl status mi_script.service
+
+Kill it
+sudo systemctl stop cansat.service
+
+
+to config the exec start up
+sudo nano /etc/systemd/system/cansat.service
