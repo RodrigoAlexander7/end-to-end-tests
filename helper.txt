@@ -5,10 +5,13 @@ source venv/bin/activate
 pip install pybind11 numpy pyserial
 mkdir build && cd build && cmake .. && make -j4
 cp cansat_pipeline*.so ../
-python scripts/cansat_pipeline.py --serial-port /dev/ttyS0
+python scripts/cansat_pipeline.py --serial-port /dev/ttyS0 
+
+#IF YOU USE A EXTERNAL LED
+python scripts/cansat_pipeline.py --serial-port /dev/ttyS0 --led-pin 17
 
 #IF YOU USE THE LED VERSION YOU NEED TO USE
-sudo python scripts/cansat_pipeline.py --serial-port /dev/ttyS0
+sudo python scripts/cansat_pipeline.py --serial-port /dev/ttyS0 --led-pin 17
 
 
 see status:
@@ -16,7 +19,7 @@ sudo systemctl status mi_script.service
 
 Kill it
 sudo systemctl stop cansat.service
-
+sudo systemctl stop mi_script.service
 
 to config the exec start up
 sudo nano /etc/systemd/system/cansat.service
