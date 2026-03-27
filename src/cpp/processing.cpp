@@ -2,6 +2,7 @@
 #include <opencv2/imgproc.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <chrono>
 
 namespace cansat {
 
@@ -60,14 +61,28 @@ void ImageProcessor::process(const cv::Mat& stereo_frame, cv::Mat& anaglyph) {
         throw std::runtime_error("Empty stereo frame");
     }
 
+    auto t0 = std::chrono::steady_clock::now();
+
     // Step 1: Split
     split_stereo(stereo_frame, left_raw_, right_raw_);
+    auto t1 = std::chrono::steady_clock::now();
 
     // Step 2: Undistort
     undistort(left_raw_, right_raw_, left_undist_, right_undist_);
+    auto t2 = std::chrono::steady_clock::now();
 
     // Step 3: Anaglyph
     make_anaglyph(left_undist_, right_undist_, anaglyph);
+    auto t3 = std::chrono::steady_clock::now();
+
+    // Calculate durations in milliseconds
+    auto split_ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    auto undist_ms = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0;
+    auto anaglyph_ms = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0;
+
+    std::cout << "[TIMING] split=" << split_ms << "ms, "
+              << "undistort=" << undist_ms << "ms, "
+              << "anaglyph=" << anaglyph_ms << "ms" << std::endl;
 }
 
 } // namespace cansat

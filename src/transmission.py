@@ -128,6 +128,9 @@ class XBeeTransmitter:
         total_chunks = (len(image_data) + MAX_PAYLOAD - 1) // MAX_PAYLOAD
         log.info("TX image %d: %d bytes, %d packets", image_id, len(image_data), total_chunks)
 
+        t_start = time.perf_counter()
+        sensor_packets = 0
+
         for seq in range(total_chunks):
             offset = seq * MAX_PAYLOAD
             chunk = image_data[offset : offset + MAX_PAYLOAD]
@@ -138,9 +141,19 @@ class XBeeTransmitter:
                 return False
 
             time.sleep(INTER_PACKET_DELAY)
-            self._maybe_send_sensor()
 
-        log.info("TX image %d complete", image_id)
+            # Track sensor packets sent during image
+            old_count = self._packet_count
+            self._maybe_send_sensor()
+            if self._packet_count < old_count:  # Reset means sensor was sent
+                sensor_packets += 1
+
+        t_elapsed = time.perf_counter() - t_start
+        throughput = len(image_data) / t_elapsed if t_elapsed > 0 else 0
+        avg_pkt_time = (t_elapsed / total_chunks * 1000) if total_chunks > 0 else 0
+
+        log.info("[TIMING] Image %d: %.2fs, %.1f B/s, %.1fms/pkt, %d sensor pkts",
+                 image_id, t_elapsed, throughput, avg_pkt_time, sensor_packets)
         return True
 
     def transmit_sensor_only(self) -> bool:

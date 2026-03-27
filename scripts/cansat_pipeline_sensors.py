@@ -7,6 +7,7 @@ sensor data using 10:1 ratio (10 image chunks : 1 sensor packet).
 """
 
 import sys
+import time
 import logging
 import argparse
 import numpy as np
@@ -67,6 +68,8 @@ def load_calibration(pipeline, calib_path: str) -> bool:
 
 def run(args):
     """Main pipeline execution."""
+    t_start = time.perf_counter()
+
     # Import C++ module
     try:
         import cansat_pipeline as cpp
@@ -75,12 +78,15 @@ def run(args):
         sys.exit(1)
 
     # Initialize sensors
+    t_sensors_start = time.perf_counter()
     sensors = SensorHub()
     if not sensors.initialize():
         log.warning("No sensors available, continuing without telemetry")
         sensor_reader = None
     else:
         sensor_reader = sensors.read_all
+    t_sensors = time.perf_counter() - t_sensors_start
+    log.info("[TIMING] Sensor init: %.2fs", t_sensors)
 
     # Configure pipeline
     config = cpp.PipelineConfig()
@@ -91,15 +97,24 @@ def run(args):
     config.num_captures = args.num_captures
     config.interval_seconds = args.interval
 
+    t_pipeline_init = time.perf_counter()
     pipeline = cpp.Pipeline(config)
     pipeline.initialize()
 
     if args.calibration:
         load_calibration(pipeline, args.calibration)
+    t_pipeline = time.perf_counter() - t_pipeline_init
+    log.info("[TIMING] Pipeline init: %.2fs", t_pipeline)
 
     # Acquire images
     log.info("Starting acquisition...")
+    t_capture_start = time.perf_counter()
     images = pipeline.run_acquisition()
+    t_capture = time.perf_counter() - t_capture_start
+
+    total_bytes = sum(len(img) for img in images if img)
+    log.info("[TIMING] Capture: %.2fs for %d images (%.1f KB total)",
+             t_capture, len(images), total_bytes / 1024)
 
     # Transmit or save
     if args.serial_port:
@@ -113,10 +128,15 @@ def run(args):
             )
             log.info("XBee opened: %s @ %d baud", args.serial_port, args.baudrate)
 
+            t_tx_start = time.perf_counter()
             success = transmit_images_with_telemetry(
                 ser, images, sensor_reader, inter_image_delay=0.5
             )
-            log.info("Transmitted %d/%d images", success, len(images))
+            t_tx = time.perf_counter() - t_tx_start
+
+            throughput = total_bytes / t_tx if t_tx > 0 else 0
+            log.info("[TIMING] Transmission: %.2fs for %d/%d images (%.1f B/s)",
+                     t_tx, success, len(images), throughput)
 
             ser.close()
         except ImportError:
@@ -138,6 +158,9 @@ def run(args):
     # Cleanup
     pipeline.shutdown()
     sensors.close()
+
+    t_total = time.perf_counter() - t_start
+    log.info("[TIMING] Total pipeline: %.2fs", t_total)
 
 
 def main():
