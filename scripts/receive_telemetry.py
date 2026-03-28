@@ -144,13 +144,17 @@ class CansatReceiver:
             # Parse header
             _, pkt_type, seq, total, pkt_len = struct.unpack(">2sBHHH", buffer[:HEADER_SIZE])
 
+            # Prevenir bloqueos por falsos positivos de SYNC dentro de una imagen
+            if pkt_len > 512:
+                buffer = buffer[2:]
+                continue
+
             total_size = HEADER_SIZE + pkt_len + CRC_SIZE
             if len(buffer) < total_size:
                 break
 
-            # Extract packet
+            # Extraer paquete para validación
             packet = buffer[:total_size]
-            buffer = buffer[total_size:]
 
             # Verify CRC
             header_no_sync = packet[2:HEADER_SIZE]
@@ -163,7 +167,14 @@ class CansatReceiver:
                 if self.crc_errors % 20 == 1:  # Log every 20th error
                     log.warning("CRC mismatch #%d: got %04X, expected %04X",
                                self.crc_errors, recv_crc, calc_crc)
+                # RECUPERACIÓN CRÍTICA: Desechar SÓLO los 2 bytes falsos de sync, 
+                # en lugar de brincarse todo el `total_size`, para no tragarnos
+                # el inicio del próximo paquete válido por accidente.
+                buffer = buffer[2:]
                 continue
+
+            # Paquete 100% válido, avanzar buffer completo
+            buffer = buffer[total_size:]
 
             # Route by packet type
             if pkt_type == PACKET_TYPE_SENSOR:

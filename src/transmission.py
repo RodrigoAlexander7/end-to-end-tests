@@ -52,6 +52,10 @@ class XBeeTransmitter:
             with self._lock:
                 self._serial.write(packet)
                 self._serial.flush()
+                # Mantener el delay DENTRO del lock asegura que la placa XBee 
+                # siempre tenga una ventana de tiempo (gap) para empaquetar 
+                # y enviar por el aire sin concatenarse con el thread de telemetría.
+                time.sleep(INTER_PACKET_DELAY)
             return True
         except Exception as e:
             log.error("TX failed: %s", e)
@@ -112,7 +116,6 @@ class XBeeTransmitter:
             packet = build_sensor_packet(sensor_data)
             if self._send_packet(packet):
                 log.debug("TX sensor (interleaved, t=%d)", sensor_data.get("timestamp", 0))
-            time.sleep(INTER_PACKET_DELAY)
 
     def transmit_image(self, image_data: bytes, image_id: int) -> bool:
         """
@@ -139,8 +142,6 @@ class XBeeTransmitter:
             if not self._send_packet(packet):
                 log.error("TX failed at packet %d/%d", seq + 1, total_chunks)
                 return False
-
-            time.sleep(INTER_PACKET_DELAY)
 
             # Track sensor packets sent during image
             old_count = self._packet_count

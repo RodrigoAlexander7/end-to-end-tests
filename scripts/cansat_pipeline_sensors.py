@@ -27,6 +27,36 @@ logging.basicConfig(
 log = logging.getLogger("cansat")
 
 
+def initialize_servo(gpio_pin=18):
+    """Inicializa la rutina de movimiento del servo al arrancar."""
+    try:
+        from gpiozero import Servo
+        from time import sleep
+        
+        # GPIO 18 (pin físico 12)
+        servo = Servo(
+            gpio_pin,
+            min_pulse_width=0.5/1000,
+            max_pulse_width=2.5/1000
+        )
+
+        log.info("Moviendo al máximo (derecha)...")
+        servo.max()
+        sleep(2)
+
+        log.info("Moviendo al mínimo (izquierda)...")
+        servo.min()
+        sleep(2)
+
+        log.info("Regresando al centro...")
+        servo.mid()
+        sleep(1)
+        
+        servo.detach()
+    except Exception as e:
+        log.warning("Servo initialization fallback: %s", e)
+
+
 def load_calibration(pipeline, calib_path: str) -> bool:
     """Load calibration remap matrices from a .npz file."""
     path = Path(calib_path)
@@ -100,11 +130,21 @@ def run(args):
     t_pipeline_init = time.perf_counter()
     pipeline = cpp.Pipeline(config)
     pipeline.initialize()
-
-    if args.calibration:
-        load_calibration(pipeline, args.calibration)
     t_pipeline = time.perf_counter() - t_pipeline_init
     log.info("[TIMING] Pipeline init: %.2fs", t_pipeline)
+
+    # Initialize servo sweep
+    t_servo_start = time.perf_counter()
+    if not getattr(args, 'no_servo', False):
+        initialize_servo(getattr(args, 'servo_pin', 18))
+    t_servo = time.perf_counter() - t_servo_start
+    log.info("[TIMING] Servo sweep: %.2fs", t_servo)
+
+    t_calib_start = time.perf_counter()
+    if args.calibration:
+        load_calibration(pipeline, args.calibration)
+    t_calib = time.perf_counter() - t_calib_start
+    log.info("[TIMING] Calibration load: %.2fs", t_calib)
 
     # Acquire images
     log.info("Starting acquisition...")
@@ -145,6 +185,7 @@ def run(args):
             log.error("Serial error: %s", e)
     else:
         # Save to disk
+        t_save_start = time.perf_counter()
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         for idx, img_data in enumerate(images):
@@ -154,6 +195,8 @@ def run(args):
             with open(out_path, "wb") as f:
                 f.write(img_data)
             log.info("Saved %s (%d bytes)", out_path, len(img_data))
+        t_save = time.perf_counter() - t_save_start
+        log.info("[TIMING] Save images to disk: %.2fs", t_save)
 
     # Cleanup
     pipeline.shutdown()
@@ -177,6 +220,8 @@ def main():
     parser.add_argument("--serial-port", type=str, default=None, help="XBee serial port")
     parser.add_argument("--baudrate", type=int, default=9600, help="Serial baudrate")
     parser.add_argument("--output-dir", type=str, default="output", help="Output directory")
+    parser.add_argument("--servo-pin", type=int, default=18, help="BCM GPIO pin for servo (default: 18)")
+    parser.add_argument("--no-servo", action="store_true", help="Skip servo initialization")
 
     run(parser.parse_args())
 
